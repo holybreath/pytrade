@@ -1,0 +1,212 @@
+//@version=5
+strategy("Voting Reversal Strategy", overlay=true, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.1, slippage=2)
+
+// Indicator Inputs
+// SMA Inputs
+short_sma_len = input.int(20, title="Short SMA Length", minval=1, group="SMA Settings")
+long_sma_len = input.int(50, title="Long SMA Length", minval=1, group="SMA Settings")
+
+// EMA Inputs
+short_ema_len = input.int(12, title="Short EMA Length", minval=1, group="EMA Settings")
+long_ema_len = input.int(26, title="Long EMA Length", minval=1, group="EMA Settings")
+
+// RSI Inputs
+rsi_len = input.int(14, title="RSI Length", minval=1, group="RSI Settings")
+rsi_ob = input.float(70, title="RSI Overbought Level", minval=50, maxval=100, step=1, group="RSI Settings")
+rsi_os = input.float(30, title="RSI Oversold Level", minval=0, maxval=50, step=1, group="RSI Settings")
+rsi_source = input.source(close, title="RSI Source", group="RSI Settings")
+
+// MACD Inputs
+macd_fast_len = input.int(12, title="MACD Fast Length", minval=1, group="MACD Settings")
+macd_slow_len = input.int(26, title="MACD Slow Length", minval=1, group="MACD Settings")
+macd_sig_len = input.int(9, title="MACD Signal Length", minval=1, group="MACD Settings")
+
+// Bollinger Bands Inputs
+bb_len = input.int(20, title="BB Length", minval=1, group="Bollinger Bands Settings")
+bb_mult = input.float(2.0, title="BB Multiplier", minval=0.1, step=0.1, group="Bollinger Bands Settings")
+bb_source = input.source(close, title="BB Source", group="Bollinger Bands Settings")
+
+// Stochastic Oscillator Inputs
+sto_k = input.int(14, title="Stochastic %K", minval=1, group="Stochastic Settings")
+sto_d = input.int(3, title="Stochastic %D", minval=1, group="Stochastic Settings")
+sto_smooth = input.int(3, title="Stochastic Smoothing", minval=1, group="Stochastic Settings")
+
+// ATR Inputs
+atr_len = input.int(14, title="ATR Length", minval=1, group="ATR Settings")
+atr_stop_multiplier = input.float(2.0, title="ATR Stop Multiplier", minval=0.1, step=0.1, group="ATR Settings")
+
+// CCI Inputs
+cci_len = input.int(20, title="CCI Length", minval=1, group="CCI Settings")
+
+// VWAP - VWAP is typically calculated on intraday charts and doesn't have standard 'length' inputs in the same way as others.
+// We'll use the built-in ta.vwap which doesn't require a length parameter. Input for source might be useful if not close.
+vwap_source = input.source(hlc3, title="VWAP Source", group="VWAP Settings")
+
+// Indicator Calculations
+
+// SMA Calculations
+short_sma = ta.sma(close, short_sma_len)
+long_sma = ta.sma(close, long_sma_len)
+
+// EMA Calculations
+short_ema = ta.ema(close, short_ema_len)
+long_ema = ta.ema(close, long_ema_len)
+
+// RSI Calculation
+rsi = ta.rsi(rsi_source, rsi_len)
+
+// MACD Calculation
+[macd_line, macd_signal_line, macd_hist] = ta.macd(close, macd_fast_len, macd_slow_len, macd_sig_len)
+
+// Bollinger Bands Calculation
+[bb_middle, bb_upper, bb_lower] = ta.bb(bb_source, bb_len, bb_mult)
+
+// Stochastic Oscillator Calculation
+sto_k_val = ta.sma(ta.stoch(close, high, low, sto_k), sto_smooth) // Applying smoothing to %K
+sto_d_val = ta.sma(sto_k_val, sto_d) // %D is a MA of %K
+
+// ATR Calculation
+atr_val = ta.atr(atr_len)
+
+// OBV Calculation (Built-in, uses close internally by default for its logic)
+obv_val = ta.obv
+
+// CCI Calculation
+cci_val = ta.cci(hlc3, cci_len) // hlc3 is a common source for CCI
+
+// VWAP Calculation
+vwap_val = ta.vwap(vwap_source)
+
+// Reversal Voting Logic
+
+var bullish_votes = 0
+var bearish_votes = 0
+
+// SMA Vote
+sma_bullish_reversal = ta.crossunder(long_sma, short_sma) // Short SMA crossed UNDER Long SMA (price was falling, now short SMA is rising faster)
+sma_bearish_reversal = ta.crossunder(short_sma, long_sma)  // Short SMA crossed UNDER Long SMA (price was rising, now short SMA is falling faster)
+sma_vote = sma_bullish_reversal ? 1 : sma_bearish_reversal ? -1 : 0
+
+// EMA Vote
+ema_bullish_reversal = ta.crossunder(long_ema, short_ema)
+ema_bearish_reversal = ta.crossunder(short_ema, long_ema)
+ema_vote = ema_bullish_reversal ? 1 : ema_bearish_reversal ? -1 : 0
+
+// RSI Vote
+rsi_bullish_reversal = ta.crossabove(rsi, rsi_os)
+rsi_bearish_reversal = ta.crossbelow(rsi, rsi_ob)
+rsi_vote = rsi_bullish_reversal ? 1 : rsi_bearish_reversal ? -1 : 0
+
+// MACD Vote
+macd_bullish_reversal = ta.crossabove(macd_line, macd_signal_line)
+macd_bearish_reversal = ta.crossbelow(macd_line, macd_signal_line)
+macd_vote = macd_bullish_reversal ? 1 : macd_bearish_reversal ? -1 : 0
+
+// Bollinger Bands Vote
+// Bullish: Price crossed below lower band then closed back ABOVE lower band
+bb_price_crossed_below_lower = close[1] < bb_lower[1] and close > bb_lower
+// Bearish: Price crossed above upper band then closed back BELOW upper band
+bb_price_crossed_above_upper = close[1] > bb_upper[1] and close < bb_upper
+bb_vote = bb_price_crossed_below_lower ? 1 : bb_price_crossed_above_upper ? -1 : 0
+
+// Stochastic Oscillator Vote
+sto_overbought = 80
+sto_oversold = 20
+sto_bullish_reversal = ta.crossabove(sto_k_val, sto_d_val) and sto_k_val < sto_oversold
+sto_bearish_reversal = ta.crossbelow(sto_k_val, sto_d_val) and sto_k_val > sto_overbought
+sto_vote = sto_bullish_reversal ? 1 : sto_bearish_reversal ? -1 : 0
+
+// ATR Vote (Neutral as it's not a directional reversal indicator)
+atr_vote = 0
+
+// OBV Vote (Simplified)
+price_sma_for_obv = ta.sma(close, 20) // Short SMA for price context
+obv_rising = obv_val > obv_val[1]
+obv_falling = obv_val < obv_val[1]
+obv_bullish_signal = close > price_sma_for_obv and obv_rising
+obv_bearish_signal = close < price_sma_for_obv and obv_falling
+obv_vote = obv_bullish_signal ? 1 : obv_bearish_signal ? -1 : 0
+
+// CCI Vote
+cci_bullish_reversal = ta.crossabove(cci_val, -100)
+cci_bearish_reversal = ta.crossbelow(cci_val, 100)
+cci_vote = cci_bullish_reversal ? 1 : cci_bearish_reversal ? -1 : 0
+
+// VWAP Vote
+vwap_bullish_reversal = ta.crossabove(close, vwap_val)
+vwap_bearish_reversal = ta.crossbelow(close, vwap_val)
+vwap_vote = vwap_bullish_reversal ? 1 : vwap_bearish_reversal ? -1 : 0
+
+// Initialize vote counts for each bar
+bullish_votes := 0
+bearish_votes := 0
+
+if sma_vote == 1 { bullish_votes += 1 } else if sma_vote == -1 { bearish_votes += 1 }
+if ema_vote == 1 { bullish_votes += 1 } else if ema_vote == -1 { bearish_votes += 1 }
+if rsi_vote == 1 { bullish_votes += 1 } else if rsi_vote == -1 { bearish_votes += 1 }
+if macd_vote == 1 { bullish_votes += 1 } else if macd_vote == -1 { bearish_votes += 1 }
+if bb_vote == 1 { bullish_votes += 1 } else if bb_vote == -1 { bearish_votes += 1 }
+if sto_vote == 1 { bullish_votes += 1 } else if sto_vote == -1 { bearish_votes += 1 }
+// ATR vote is neutral, so not added to bullish/bearish counts
+if obv_vote == 1 { bullish_votes += 1 } else if obv_vote == -1 { bearish_votes += 1 }
+if cci_vote == 1 { bullish_votes += 1 } else if cci_vote == -1 { bearish_votes += 1 }
+if vwap_vote == 1 { bullish_votes += 1 } else if vwap_vote == -1 { bearish_votes += 1 }
+
+// Total number of active indicators (excluding ATR)
+total_indicators = 9
+
+// Determine Entry Signals
+
+vote_threshold = total_indicators / 2.0
+
+long_entry_signal = bullish_votes > vote_threshold and bearish_votes == 0 // Strong bullish consensus
+short_entry_signal = bearish_votes > vote_threshold and bullish_votes == 0 // Strong bearish consensus
+
+// Optional: A less strict version could be:
+// long_entry_signal = bullish_votes > vote_threshold and bullish_votes > bearish_votes
+// short_entry_signal = bearish_votes > vote_threshold and bearish_votes > bullish_votes
+// For now, using the stricter version where opposing votes must be zero.
+
+// Strategy Entry and Exit Logic
+
+// Calculate Stop Loss Levels
+long_stop_price = strategy.position_avg_price - (atr_val * atr_stop_multiplier)
+short_stop_price = strategy.position_avg_price + (atr_val * atr_stop_multiplier)
+
+// Entry Conditions
+if (long_entry_signal)
+    strategy.entry("Long", strategy.long)
+    // strategy.exit("Long SL/TP", from_entry="Long", stop=long_stop_price) // Set SL at time of entry
+
+if (short_entry_signal)
+    strategy.entry("Short", strategy.short)
+    // strategy.exit("Short SL/TP", from_entry="Short", stop=short_stop_price) // Set SL at time of entry
+
+// Exit conditions (ATR Stop Loss and Opposing Signal)
+if (strategy.position_size > 0) // If long
+    strategy.exit("Long Exit", stop=long_stop_price) // ATR Stop Loss for Long
+    if (short_entry_signal) // Opposing signal
+        strategy.close("Long", comment="Opposing Short Signal")
+
+if (strategy.position_size < 0) // If short
+    strategy.exit("Short Exit", stop=short_stop_price) // ATR Stop Loss for Short
+    if (long_entry_signal) // Opposing signal
+        strategy.close("Short", comment="Opposing Long Signal")
+
+// Alert Conditions
+alertcondition(long_entry_signal, title="Voting Strategy Long Alert", message="Voting Strategy: Potential Long Entry Signal!")
+alertcondition(short_entry_signal, title="Voting Strategy Short Alert", message="Voting Strategy: Potential Short Entry Signal!")
+
+// Plotting
+plot(bullish_votes, title="Bullish Votes", color=color.new(color.green, 0), style=plot.style_columns, display=display.data_window)
+plot(bearish_votes, title="Bearish Votes", color=color.new(color.red, 0), style=plot.style_columns, display=display.data_window)
+plot(vote_threshold, title="Vote Threshold", color=color.new(color.blue, 0), style=plot.style_line, display=display.data_window)
+
+// Example of plotting one indicator (e.g., RSI) and its levels
+// plot(rsi, title="RSI", color=color.orange)
+// hline(rsi_ob, "RSI OB", color=color.gray)
+// hline(rsi_os, "RSI OS", color=color.gray)
+
+// Plot entry signals on chart for visual backtesting
+plotshape(long_entry_signal, title="Long Entry Signal", location=location.belowbar, color=color.green, style=shape.labelup, text="BUY", textcolor=color.white, size=size.tiny)
+plotshape(short_entry_signal, title="Short Entry Signal", location=location.abovebar, color=color.red, style=shape.labeldown, text="SELL", textcolor=color.white, size=size.tiny)
