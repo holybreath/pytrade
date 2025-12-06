@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin</title>
+</head>
+<body>
+    <h1>Welcome, {{ name }}!</h1>
+    <p>This is the admin page.</p>
+    <a href="{{ url_for('user_list') }}">View User List</a>
+    <br>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</body>
+</html>

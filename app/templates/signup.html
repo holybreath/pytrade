@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Signup</title>
+</head>
+<body>
+    <h1>Signup</h1>
+    <form method="POST" action="">
+        {{ form.hidden_tag() }}
+        {{ form.username.label }} {{ form.username() }}
+        {% for error in form.username.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+        <br>
+        {{ form.password.label }} {{ form.password() }}
+        {% for error in form.password.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+        <br>
+        {{ form.confirm_password.label }} {{ form.confirm_password() }}
+        {% for error in form.confirm_password.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+        <br>
+        {{ form.submit() }}
+    </form>
+    <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a>.</p>
+</body>
+</html>
