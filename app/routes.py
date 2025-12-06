@@ -1,9 +1,10 @@
-from flask import render_template, redirect, url_for, request, flash
+from flask import render_template, redirect, url_for, request, flash, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import app, db
 from app.models import User
 from app.forms import LoginForm, RegistrationForm
+from datetime import datetime
 
 @app.login_manager.user_loader
 def load_user(user_id):
@@ -22,6 +23,8 @@ def login():
         user = User.query.filter_by(username=form.username.data).first()
         if user and check_password_hash(user.password, form.password.data):
             login_user(user)
+            user.last_login = datetime.utcnow()
+            db.session.commit()
             return redirect(url_for('admin'))
         else:
             flash('Login Unsuccessful. Please check username and password', 'danger')
@@ -40,6 +43,9 @@ def admin():
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    if not current_app.config['ALLOW_REGISTRATION']:
+        flash('Registration is currently disabled.', 'info')
+        return redirect(url_for('login'))
     form = RegistrationForm()
     if form.validate_on_submit():
         hashed_password = generate_password_hash(form.password.data, method='pbkdf2:sha256')
@@ -49,3 +55,10 @@ def signup():
         flash('Your account has been created! You are now able to log in', 'success')
         return redirect(url_for('login'))
     return render_template('signup.html', form=form)
+
+@app.route('/users')
+@login_required
+def user_list():
+    users = User.query.all()
+    user_count = len(users)
+    return render_template('user_list.html', users=users, user_count=user_count)
