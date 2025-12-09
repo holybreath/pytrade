@@ -11,7 +11,6 @@
         {{ form.password.label }} {{ form.password() }}
         {{ form.submit() }}
     </form>
-    <p>Don't have an account? <a href="{{ url_for('signup') }}">Sign up here</a>.</p>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
