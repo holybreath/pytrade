@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Proxy</title>
+</head>
+<body>
+    <h1>Web Proxy</h1>
+    <form id="proxy-form">
+        <input type="text" id="url-input" placeholder="Enter URL" size="50">
+        <button type="submit">Go</button>
+    </form>
+    <script>
+        document.getElementById('proxy-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const url = document.getElementById('url-input').value;
+            if (url) {
+                window.location.href = `/proxy/${url}`;
+            }
+        });
+    </script>
+</body>
+</html>
